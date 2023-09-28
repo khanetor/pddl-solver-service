@@ -7,6 +7,7 @@ object Main extends IOApp.Simple:
   val solver = Solver(1000)
   def run: IO[Unit] =
     for
-      actions <- solver.use(_.solve(Solver.domainString, Solver.problemString))
-      _ <- actions.map(a => IO.println(s"${a.getName()}: ${a.getParameters().toList} [${a.getDuration()}]")).sequence
+      solution <- solver.use(_.solve(Solver.domainString, Solver.problemString))
+      _ <- IO.println("The plan:") >> IO.println(solution.plan)
+      _ <- IO.println("The states") >> IO.println(solution.states)
     yield ()
