@@ -1,53 +1,23 @@
 package solvers
 
-import cats.effect.{Resource, IO}
-import scala.jdk.CollectionConverters.*
+import cats.effect.{IO, Resource}
 
-import java.nio.file.{Files, Path}
-
-import fr.uga.pddl4j.parser.{Parser, ParsedProblem, DefaultParsedProblem}
-import fr.uga.pddl4j.planners.statespace.FF
-import fr.uga.pddl4j.planners.LogLevel
 import fr.uga.pddl4j.problem.operator.Action
-import fr.uga.pddl4j.problem.DefaultProblem
+import fr.uga.pddl4j.planners.LogLevel
 
-class Solver(timeout: Int, logLevel: LogLevel, prefix: String = ""):
-  val parser = Parser()
-  val planner = FF()
-  planner.setLogLevel(logLevel)
-  planner.setTimeout(timeout)
-
-  def parse(domainText: String, problemText: String): IO[DefaultParsedProblem] =
-    val resource = for
-      domain <- Resource.make(
-        IO.blocking(Files.createTempFile(prefix, "-domain.pddl"))
-      )(f => IO.blocking(Files.delete(f)))
-      problem <- Resource.make(
-        IO.blocking(Files.createTempFile(prefix, "-problem.pddl"))
-      )(f => IO.blocking(Files.delete(f)))
-      _ <- Resource.eval(
-        IO.blocking(Files.writeString(domain, domainText)) *>
-          IO.blocking(Files.writeString(problem, problemText))
-      )
-    yield (domain, problem)
-
-    resource.use:
-      case (domain, problem) =>
-        IO.blocking(parser.parse(domain.toFile(), problem.toFile()))
-
-  def solve(domainText: String, problemText: String): IO[List[Action]] =
-    for
-      parsedProblem <- parse(domainText, problemText)
-      problem <- IO(DefaultProblem(parsedProblem))
-      _ <- IO.blocking(problem.instantiate())
-      plan <- IO.blocking(planner.solve(problem))
-    yield plan.actions().asScala.toList
-
-  def exit(): IO[Unit] = IO.unit
+trait Solver:
+  def solve(domainText: String, problemText: String): IO[Solver.Solution]
+  def exit(): IO[Unit]
 
 object Solver:
   def apply(timeout: Int): Resource[IO, Solver] =
-    Resource.make(IO(new Solver(timeout, LogLevel.INFO)))(_.exit())
+    Resource.make(
+      IO(
+        Pddl4jSolver(timeout, LogLevel.INFO)
+      )
+    )(_.exit())
+
+  case class Solution(plan: List[String], states: List[String])
 
   val domainString = """
   (define (domain wgc)
